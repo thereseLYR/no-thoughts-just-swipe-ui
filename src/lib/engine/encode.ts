@@ -63,16 +63,22 @@ export function decodeParams(seed: string): DecodeResult {
     return { ok: false, error: 'That link is not a valid design system seed.' };
   }
 
-  if (!Array.isArray(parsed) || parsed.length !== AXES.length + 1) {
-    return { ok: false, error: 'That link is malformed or from a different version.' };
+  if (!Array.isArray(parsed) || parsed.length < 1) {
+    return { ok: false, error: 'That link is malformed.' };
   }
 
+  // Version first: an older link has a different axis count, so a length check
+  // would report it as malformed and hide the actually useful reason.
   const [version, ...indices] = parsed as number[];
   if (version !== ENGINE_VERSION) {
     return {
       ok: false,
       error: `This link was made with engine v${version}; this app runs v${ENGINE_VERSION}.`,
     };
+  }
+
+  if (indices.length !== AXES.length) {
+    return { ok: false, error: 'That link is malformed.' };
   }
 
   const out = {} as Record<AxisKey, unknown>;

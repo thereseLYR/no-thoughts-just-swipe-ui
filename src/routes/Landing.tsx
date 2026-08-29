@@ -1,7 +1,7 @@
 import { useLocation } from 'wouter';
 import { ArrowRight } from 'lucide-react';
 import { useSession } from '@/store/session';
-import { AXES } from '@/lib/engine/params';
+import { SWIPEABLE_AXES } from '@/lib/engine/params';
 
 export default function Landing() {
   const [, navigate] = useLocation();
@@ -17,9 +17,9 @@ export default function Landing() {
         just swipe
       </h1>
       <p className="mt-6 text-lg leading-relaxed text-zinc-400">
-        Pick between two interfaces, about thirty times. We narrow down{' '}
-        {AXES.length} design decisions from your answers, then hand you a Tailwind v4
-        design system — tokens, components, contrast already checked.
+        Starts wild — cyberpunk against pastel, brutalist against editorial — then
+        narrows. About 25 picks to pin down {SWIPEABLE_AXES.length} decisions, and you walk away
+        with a Tailwind v4 design system: tokens, components, contrast already checked.
       </p>
 
       <div className="mt-10 flex flex-wrap items-center gap-3">

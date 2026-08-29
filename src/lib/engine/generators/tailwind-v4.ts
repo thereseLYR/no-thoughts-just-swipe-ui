@@ -11,9 +11,13 @@ import type { DesignTokens, SemanticColors } from '../tokens';
 export type ColorFormat = 'hex' | 'oklch' | 'both';
 
 function semanticBlock(c: SemanticColors, indent = '  '): string {
-  return (Object.entries(c) as Array<[string, string]>)
-    .map(([k, v]) => `${indent}--color-${kebab(k)}: ${v};`)
-    .join('\n');
+  const lines = (Object.entries(c) as Array<[string, string | null]>)
+    .filter(([k, v]) => k !== 'bgImage' && typeof v === 'string')
+    .map(([k, v]) => `${indent}--color-${kebab(k)}: ${v};`);
+  // A gradient is not a colour, so it rides as its own variable rather than
+  // being jammed into the --color-* namespace where Tailwind would pick it up.
+  lines.push(`${indent}--bg-image: ${c.bgImage ?? 'none'};`);
+  return lines.join('\n');
 }
 
 function kebab(s: string): string {
@@ -53,6 +57,10 @@ export function generateTailwindV4(t: DesignTokens, format: ColorFormat = 'hex')
         `@supports (color: oklch(0 0 0)) {\n  /* Regenerate with format: 'oklch' for full P3 output. */\n}\n`
       : '';
 
+  const primary = t.mode === 'dark' ? t.color.dark : t.color.light;
+  const secondary = t.mode === 'dark' ? t.color.light : t.color.dark;
+  const otherMode = t.mode === 'dark' ? 'light' : 'dark';
+
   return `${fontImport}
 @import "tailwindcss";
 
@@ -65,13 +73,13 @@ export function generateTailwindV4(t: DesignTokens, format: ColorFormat = 'hex')
   /* Brand + neutral ramps */
 ${ramps}
 
-  /* Semantic colours (light) */
-${semanticBlock(t.color.light)}
+  /* Semantic colours — this system leads with ${t.mode} */
+${semanticBlock(primary)}
 
   /* Typography */
-  --font-heading: "${t.type.heading}", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "${t.type.body}", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "${t.type.mono}", ui-monospace, SFMono-Regular, monospace;
+  --font-heading: ${t.type.stacks.heading};
+  --font-body: ${t.type.stacks.body};
+  --font-mono: ${t.type.stacks.mono};
 ${text}
 
   /* Spacing */
@@ -81,22 +89,36 @@ ${spacing}
   /* Shape */
 ${radius}
 ${shadow}
+  --shadow-hover: ${t.interaction.shadow};
   --border-width-default: ${t.borderWidth};
 }
 
-/* Dark mode swaps only the semantic layer; the ramps are shared. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-${semanticBlock(t.color.dark, '    ')}
+/* Interaction. Derived from elevation: ${t.interaction.style}. */
+:root {
+  --hover-transform: ${t.interaction.transform};
+  --interactive-transition: ${t.interaction.transition};
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --interactive-transition: none;
   }
 }
 
-:root[data-theme="dark"] {
-${semanticBlock(t.color.dark, '  ')}
+/* The opposite mode swaps only the semantic layer; the ramps are shared. */
+@media (prefers-color-scheme: ${otherMode}) {
+  :root:not([data-theme="${t.mode}"]) {
+${semanticBlock(secondary, '    ')}
+  }
+}
+
+:root[data-theme="${otherMode}"] {
+${semanticBlock(secondary, '  ')}
 }
 
 body {
   background-color: var(--color-bg);
+  background-image: var(--bg-image);
   color: var(--color-text);
   font-family: var(--font-body);
   line-height: ${t.type.leading.normal};
@@ -106,6 +128,8 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   font-weight: ${t.type.weight.heading};
   line-height: ${t.type.leading.tight};
+  text-transform: ${t.type.transform};
+  letter-spacing: ${t.type.tracking};
 }
 ${oklchNote}`;
 }

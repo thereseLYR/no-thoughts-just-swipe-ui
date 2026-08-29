@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { inGamut } from 'culori';
 import { AXES, axis, defaultParams, type AxisKey, type DesignParams } from './params';
+import { PRESETS } from './presets';
+import { simulate, distanceTo } from './__testing__/simulatedUser';
 import { brandRamp, neutralRamp, contrast, RAMP_STOPS } from './color';
-import { buildTokens } from './tokens';
+import { buildTokens, resolveInteraction } from './tokens';
 import {
-  initBeliefs, recordChoice, bestIndex, normalizedEntropy, paramsFromBeliefs, confidence,
+  initBeliefs, recordChoice, recordComparison, bestIndex, normalizedEntropy, confidence,
 } from './scoring';
-import { nextPair, mulberry32, pairKey } from './pairing';
+import {
+  nextPair, mulberry32, diffsForWinner, phaseFor, PHASE_WEIGHT,
+  VIBE_SWIPES, FACET_SWIPES,
+} from './pairing';
 import { encodeParams, decodeParams } from './encode';
 import { bundle } from './generators';
 
@@ -16,7 +21,7 @@ const HEX = /^#[0-9a-f]{6}$/;
 describe('colour ramps', () => {
   it('emit in-gamut sRGB hex at every stop, for every hue', () => {
     for (const hue of [0, 60, 105, 145, 210, 264, 300]) {
-      for (const level of ['muted', 'balanced', 'vivid'] as const) {
+      for (const level of ['muted', 'balanced', 'vivid', 'neon'] as const) {
         const ramp = brandRamp(hue, level);
         for (const stop of RAMP_STOPS) {
           expect(ramp[stop], `hue ${hue} ${level} ${stop}`).toMatch(HEX);
@@ -27,7 +32,7 @@ describe('colour ramps', () => {
   });
 
   it('descend in lightness monotonically', () => {
-    const ramp = brandRamp(264, 'vivid');
+    const ramp = brandRamp(264, 'neon');
     const lums = RAMP_STOPS.map((s) => contrast(ramp[s], '#000000'));
     for (let i = 1; i < lums.length; i++) expect(lums[i]).toBeLessThan(lums[i - 1]!);
   });
@@ -97,57 +102,184 @@ describe('scoring', () => {
 });
 
 describe('pairing', () => {
-  it('varies exactly one axis between the two cards', () => {
+  it('opens with two complete, wildly different aesthetics', () => {
     const pair = nextPair(initBeliefs(), 0, mulberry32(42), new Set());
-    expect(pair).not.toBeNull();
-    const differing = (Object.keys(pair!.a) as AxisKey[]).filter((k) => pair!.a[k] !== pair!.b[k]);
-    expect(differing).toEqual([pair!.axis]);
+    expect(pair?.kind).toBe('preset');
+    // The whole point of the vibe round: these should not look similar.
+    expect(pair!.diffs.length).toBeGreaterThanOrEqual(6);
   });
 
-  it('keeps a real gap on long ordinal axes', () => {
-    const rng = mulberry32(7);
-    for (let i = 0; i < 50; i++) {
-      const pair = nextPair(initBeliefs(), 2, rng, new Set());
-      if (!pair) continue;
-      const def = axis(pair.axis);
-      if (!def.ordinal || def.values.length < 4) continue;
-      const len = def.values.length;
-      const raw = Math.abs(pair.aIndex - pair.bIndex);
-      const gap = def.circular ? Math.min(raw, len - raw) : raw;
-      expect(gap).toBeGreaterThanOrEqual(2);
+  it('anneals from presets through facets down to single axes', () => {
+    expect(phaseFor(0)).toBe('preset');
+    expect(phaseFor(VIBE_SWIPES - 1)).toBe('preset');
+    expect(phaseFor(VIBE_SWIPES)).toBe('facet');
+    expect(phaseFor(VIBE_SWIPES + FACET_SWIPES)).toBe('axis');
+  });
+
+  it('varies only one axis once it reaches the detail phase', () => {
+    let beliefs = initBeliefs();
+    const rng = mulberry32(3);
+    const asked = new Set<string>();
+    for (let i = 0; i < VIBE_SWIPES + FACET_SWIPES; i++) {
+      const p = nextPair(beliefs, i, rng, asked);
+      if (!p) break;
+      beliefs = recordComparison(beliefs, p.diffs, PHASE_WEIGHT[p.kind]);
+      asked.add(p.id);
     }
+    const detail = nextPair(beliefs, VIBE_SWIPES + FACET_SWIPES, rng, asked);
+    expect(detail?.kind).toBe('axis');
+    expect(detail!.diffs).toHaveLength(1);
+    const differing = (Object.keys(detail!.a) as AxisKey[]).filter(
+      (k) => detail!.a[k] !== detail!.b[k],
+    );
+    expect(differing).toEqual([detail!.diffs[0]!.axis]);
   });
 
-  it('never repeats a pair it has already asked', () => {
+  it('discounts confounded comparisons when crediting axes', () => {
+    const beliefs = initBeliefs();
+    const pair = nextPair(beliefs, 0, mulberry32(9), new Set())!;
+    const after = recordComparison(beliefs, pair.diffs, PHASE_WEIGHT.preset);
+    const touched = pair.diffs[0]!.axis;
+    // A preset swipe buys less than a full observation on any single axis.
+    expect(after.asks[touched]).toBeCloseTo(PHASE_WEIGHT.preset, 5);
+    expect(after.asks[touched]).toBeLessThan(1);
+  });
+
+  it('flips diffs when the right-hand card wins', () => {
+    const pair = nextPair(initBeliefs(), 0, mulberry32(11), new Set())!;
+    const flipped = diffsForWinner(pair, 'b');
+    expect(flipped[0]!.winnerIdx).toBe(pair.diffs[0]!.loserIdx);
+    expect(flipped[0]!.loserIdx).toBe(pair.diffs[0]!.winnerIdx);
+  });
+
+  it('never repeats a comparison it has already asked', () => {
     let beliefs = initBeliefs();
     const rng = mulberry32(1);
     const asked = new Set<string>();
     for (let i = 0; i < 40; i++) {
-      const pair = nextPair(beliefs, 0, rng, asked);
+      const pair = nextPair(beliefs, i, rng, asked);
       if (!pair) break;
-      const key = pairKey(pair.axis, pair.aIndex, pair.bIndex);
-      expect(asked.has(key)).toBe(false);
-      asked.add(key);
-      beliefs = recordChoice(beliefs, pair.axis, pair.aIndex, pair.bIndex);
+      expect(asked.has(pair.id)).toBe(false);
+      asked.add(pair.id);
+      beliefs = recordComparison(beliefs, pair.diffs, PHASE_WEIGHT[pair.kind]);
     }
   });
 
-  it('returns null once a stage is settled', () => {
-    let b = initBeliefs();
+  it('keeps a real gap on long ordinal axes while scanning', () => {
+    const rng = mulberry32(7);
+    const beliefs = initBeliefs();
     for (let i = 0; i < 30; i++) {
-      b = recordChoice(b, 'depth', 1, 0);
-      b = recordChoice(b, 'accentUsage', 1, 0);
+      const pair = nextPair(beliefs, VIBE_SWIPES + FACET_SWIPES, rng, new Set());
+      if (!pair || pair.kind !== 'axis') continue;
+      const d = pair.diffs[0]!;
+      const def = axis(d.axis);
+      if (!def.ordinal || def.values.length < 5) continue;
+      const len = def.values.length;
+      const raw = Math.abs(d.winnerIdx - d.loserIdx);
+      expect(def.circular ? Math.min(raw, len - raw) : raw).toBeGreaterThanOrEqual(2);
     }
-    expect(nextPair(b, 3, mulberry32(3), new Set())).toBeNull();
+  });
+});
+
+describe('presets', () => {
+  it('are all valid points in the parameter space', () => {
+    for (const preset of PRESETS) {
+      for (const a of AXES) {
+        expect(
+          (a.values as readonly unknown[]).includes(preset.params[a.key]),
+          `${preset.id}.${a.key} = ${String(preset.params[a.key])}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('produce accessible palettes despite the loud ones', () => {
+    for (const preset of PRESETS) {
+      const t = buildTokens(preset.params);
+      expect(t.audit.textOnBg, `${preset.id} body text`).toBeGreaterThanOrEqual(4.5);
+      expect(t.audit.accentFgOnAccent, `${preset.id} accent label`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('span genuinely different territory', () => {
+    // Every preset should differ from every other on at least a third of axes.
+    for (let i = 0; i < PRESETS.length; i++) {
+      for (let j = i + 1; j < PRESETS.length; j++) {
+        const differing = AXES.filter(
+          (a) => PRESETS[i]!.params[a.key] !== PRESETS[j]!.params[a.key],
+        ).length;
+        expect(differing, `${PRESETS[i]!.id} vs ${PRESETS[j]!.id}`).toBeGreaterThanOrEqual(5);
+      }
+    }
+  });
+});
+
+describe('interaction', () => {
+  it('derives from elevation when set to auto', () => {
+    const cases = [
+      ['flat', 'tint'], ['bordered', 'tint'], ['soft-shadow', 'lift'],
+      ['hard-shadow', 'press'], ['glow', 'glow'],
+    ] as const;
+    for (const [depth, expected] of cases) {
+      const p = { ...defaultParams(), depth, interaction: 'auto' } as DesignParams;
+      expect(resolveInteraction(p), depth).toBe(expected);
+      expect(buildTokens(p).interaction.style).toBe(expected);
+    }
+  });
+
+  it('respects an explicit override', () => {
+    const p = { ...defaultParams(), depth: 'flat', interaction: 'glow' } as DesignParams;
+    expect(resolveInteraction(p)).toBe('glow');
+  });
+
+  it('keeps the hover accent readable across the whole space', () => {
+    for (const preset of PRESETS) {
+      for (const mode of ['light', 'dark'] as const) {
+        const c = buildTokens({ ...preset.params, mode }).color[mode];
+        expect(contrast(c.accentFg, c.accentHover), `${preset.id}/${mode}`)
+          .toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('moves the hover accent away from the surface, never toward it', () => {
+    for (const preset of PRESETS) {
+      const light = buildTokens({ ...preset.params, mode: 'light' }).color.light;
+      // Darker on light themes: more contrast against a light surface, so a
+      // hover can never make a control harder to read.
+      expect(contrast(light.accentHover, light.surface), preset.id)
+        .toBeGreaterThanOrEqual(contrast(light.accent, light.surface) - 0.01);
+    }
+  });
+
+  it('never costs a swipe', () => {
+    let beliefs = initBeliefs();
+    const rng = mulberry32(21);
+    const asked = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const pair = nextPair(beliefs, i, rng, asked);
+      if (!pair) break;
+      // The vibe round varies whole presets, but they all share interaction.
+      expect(pair.diffs.map((d) => d.axis)).not.toContain('interaction');
+      beliefs = recordComparison(beliefs, pair.diffs, PHASE_WEIGHT[pair.kind]);
+      asked.add(pair.id);
+    }
+  });
+
+  it('still round-trips through a share link', () => {
+    const p = { ...defaultParams(), interaction: 'press' } as DesignParams;
+    const decoded = decodeParams(encodeParams(p));
+    expect(decoded.ok && decoded.params.interaction).toBe('press');
   });
 });
 
 describe('share seeds', () => {
   it('round-trip losslessly', () => {
     const params: DesignParams = {
-      hue: 270, chroma: 'vivid', neutralTemp: 'warm', radius: 16, density: 'airy',
-      typePairing: 'serif-display', typeScale: 1.333, depth: 'hard-shadow',
-      weightContrast: 'high', accentUsage: 'bold',
+      mode: 'dark', hue: 270, chroma: 'neon', neutralTemp: 'warm', accentUsage: 'bold',
+      surfaceStyle: 'gradient', depth: 'glow', typePairing: 'terminal', typeScale: 1.333,
+      weightContrast: 'extreme', textTransform: 'uppercase', radius: 16,
+      borderWeight: 'heavy', density: 'airy', interaction: 'lift',
     };
     const result = decodeParams(encodeParams(params));
     expect(result.ok && result.params).toEqual(params);
@@ -181,62 +313,41 @@ describe('share seeds', () => {
 });
 
 describe('convergence', () => {
-  /** A user with fixed hidden taste always picks the option nearer their target. */
-  function simulate(target: DesignParams, seed: number) {
-    let beliefs = initBeliefs();
-    const rng = mulberry32(seed);
-    const asked = new Set<string>();
-    let swipes = 0;
-
-    for (let stage = 0; stage < 4; stage++) {
-      for (let guard = 0; guard < 40; guard++) {
-        const pair = nextPair(beliefs, stage, rng, asked);
-        if (!pair) break;
-        const def = axis(pair.axis);
-        const want = (def.values as readonly unknown[]).indexOf(target[pair.axis]);
-        const len = def.values.length;
-        const dist = (i: number) => {
-          const raw = Math.abs(i - want);
-          return def.circular ? Math.min(raw, len - raw) : raw;
-        };
-        const [win, lose] =
-          dist(pair.aIndex) <= dist(pair.bIndex)
-            ? [pair.aIndex, pair.bIndex]
-            : [pair.bIndex, pair.aIndex];
-        beliefs = recordChoice(beliefs, pair.axis, win, lose);
-        asked.add(pairKey(pair.axis, pair.aIndex, pair.bIndex));
-        swipes++;
-      }
-    }
-    return { params: paramsFromBeliefs(beliefs), swipes, confidence: confidence(beliefs) };
-  }
-
   const targets: DesignParams[] = [
-    { hue: 264, chroma: 'vivid', neutralTemp: 'cool', radius: 16, density: 'airy',
-      typePairing: 'geometric', typeScale: 1.333, depth: 'soft-shadow',
-      weightContrast: 'high', accentUsage: 'bold' },
-    { hue: 30, chroma: 'muted', neutralTemp: 'warm', radius: 0, density: 'tight',
-      typePairing: 'serif-display', typeScale: 1.125, depth: 'hard-shadow',
-      weightContrast: 'low', accentUsage: 'subtle' },
-    { hue: 150, chroma: 'balanced', neutralTemp: 'pure', radius: 9999, density: 'comfortable',
-      typePairing: 'mono-accent', typeScale: 1.2, depth: 'flat',
-      weightContrast: 'high', accentUsage: 'bold' },
+    { mode: 'dark', hue: 300, chroma: 'neon', neutralTemp: 'cool', accentUsage: 'bold',
+      surfaceStyle: 'gradient', depth: 'glow', typePairing: 'terminal', typeScale: 1.25,
+      weightContrast: 'high', textTransform: 'uppercase', radius: 0,
+      borderWeight: 'medium', density: 'tight', interaction: 'auto' },
+    { mode: 'light', hue: 30, chroma: 'muted', neutralTemp: 'warm', accentUsage: 'subtle',
+      surfaceStyle: 'solid', depth: 'flat', typePairing: 'serif-display', typeScale: 1.5,
+      weightContrast: 'high', textTransform: 'none', radius: 0,
+      borderWeight: 'hairline', density: 'airy', interaction: 'auto' },
+    { mode: 'light', hue: 150, chroma: 'balanced', neutralTemp: 'pure', accentUsage: 'bold',
+      surfaceStyle: 'tinted', depth: 'hard-shadow', typePairing: 'brutalist', typeScale: 1.333,
+      weightContrast: 'extreme', textTransform: 'uppercase', radius: 9999,
+      borderWeight: 'heavy', density: 'comfortable', interaction: 'auto' },
   ];
 
-  it('recovers hidden preferences in a reasonable number of swipes', () => {
+  it('lands close to hidden preferences within the swipe budget', () => {
     for (const [n, target] of targets.entries()) {
       const { params, swipes } = simulate(target, 100 + n);
-      const matched = AXES.filter((a) => params[a.key] === target[a.key]).length;
-      expect(matched / AXES.length, `target ${n}: ${matched}/${AXES.length} in ${swipes}`)
-        .toBeGreaterThanOrEqual(0.8);
-      expect(swipes, `target ${n} swipe count`).toBeLessThanOrEqual(40);
+      // Distance, not exact matches: a confounded vibe round trades some
+      // per-axis precision for a far better opening experience.
+      const distance = distanceTo(target, params);
+      expect(distance, `target ${n} distance in ${swipes} swipes`).toBeLessThan(4);
+      expect(swipes, `target ${n} swipe count`).toBeLessThanOrEqual(26);
     }
   });
 
+  it('beats a random point in the space', () => {
+    const target = targets[0]!;
+    const learned = distanceTo(target, simulate(target, 7).params);
+    const naive = distanceTo(target, defaultParams());
+    expect(learned).toBeLessThan(naive);
+  });
+
   it('is deterministic for a given seed', () => {
-    const a = simulate(targets[0]!, 5);
-    const b = simulate(targets[0]!, 5);
-    expect(a).toEqual(b);
+    expect(simulate(targets[0]!, 5).params).toEqual(simulate(targets[0]!, 5).params);
   });
 });
 
@@ -255,6 +366,19 @@ describe('bundle', () => {
     const json = bundle(defaultParams()).find((f) => f.path === 'tokens.json')!;
     const parsed = JSON.parse(json.contents);
     expect(parsed.color.brand['500'].$type).toBe('color');
+  });
+
+  it('emits hover as tokens rather than hardcoded shades', () => {
+    const files = bundle(defaultParams());
+    const css = files.find((f) => f.path === 'app.css')!.contents;
+    expect(css).toContain('--color-accent-hover');
+    expect(css).toContain('--shadow-hover');
+    expect(css).toContain('--hover-transform');
+    expect(css).toContain('prefers-reduced-motion');
+
+    const button = files.find((f) => f.path === 'components/Button.tsx')!.contents;
+    expect(button).toContain('hover:bg-accent-hover');
+    expect(button).not.toMatch(/hover:bg-brand-\d/);
   });
 
   it('namespaces theme vars so it will not clobber Tailwind defaults', () => {

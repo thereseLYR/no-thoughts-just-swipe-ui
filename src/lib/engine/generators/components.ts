@@ -18,15 +18,20 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost';
 };
 
+// Hover is part of the token set, not a hardcoded shade: --shadow-hover,
+// --hover-transform and --interactive-transition all come from app.css, and
+// --interactive-transition already resolves to none under reduced motion.
 const base =
   'inline-flex items-center justify-center gap-sm font-medium rounded-md ' +
-  'px-lg py-sm text-base transition-colors focus-visible:outline-2 ' +
+  'px-lg py-sm text-base focus-visible:outline-2 ' +
   'focus-visible:outline-offset-2 focus-visible:outline-accent ' +
-  'disabled:opacity-50 disabled:pointer-events-none';
+  'disabled:opacity-50 disabled:pointer-events-none ' +
+  '[transition:var(--interactive-transition)] ' +
+  'hover:[box-shadow:var(--shadow-hover)] hover:[transform:var(--hover-transform)]';
 
 const variants = {
-  primary: 'bg-accent text-accent-fg hover:bg-brand-${p.accentUsage === 'bold' ? 700 : 800} shadow-sm${border ? ' border-2 border-neutral-900' : ''}',
-  secondary: 'bg-surface text-text border border-border hover:bg-bg',
+  primary: 'bg-accent text-accent-fg hover:bg-accent-hover shadow-md${border ? ' border-2 border-neutral-900' : ''}',
+  secondary: 'bg-surface text-text border border-border hover:bg-surface-hover',
   ghost: 'bg-transparent text-accent hover:bg-accent-subtle',
 };
 

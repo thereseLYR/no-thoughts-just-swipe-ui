@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { buildTokens } from '@/lib/engine/tokens';
+import { buildTokens, type DesignTokens } from '@/lib/engine/tokens';
 import { toCssVars } from '@/lib/cssVars';
 import type { DesignParams } from '@/lib/engine/params';
 
@@ -11,24 +11,45 @@ import type { DesignParams } from '@/lib/engine/params';
  * is the axis under test, not a layout difference.
  */
 
-const surface: CSSProperties = {
+export const surface: CSSProperties = {
   background: 'var(--ds-surface)',
   border: 'var(--ds-border-width) solid var(--ds-border)',
   borderRadius: 'var(--ds-radius-lg)',
   boxShadow: 'var(--ds-shadow-md)',
 };
 
-const heading: CSSProperties = {
+export const heading: CSSProperties = {
   fontFamily: 'var(--ds-font-heading)',
   fontWeight: 'var(--ds-weight-heading)' as unknown as number,
   lineHeight: 'var(--ds-leading-tight)',
   color: 'var(--ds-text)',
+  textTransform: 'var(--ds-transform)' as CSSProperties['textTransform'],
+  letterSpacing: 'var(--ds-tracking)',
 };
 
-function Button({ children, kind = 'primary' }: { children: string; kind?: 'primary' | 'ghost' }) {
+export function Button({
+  children,
+  kind = 'primary',
+  hover,
+}: {
+  children: string;
+  kind?: 'primary' | 'ghost';
+  /** Force the hover state on, for side-by-side rest/hover specimens. */
+  hover?: boolean;
+}) {
+  const rest = kind === 'primary' ? 'var(--ds-accent)' : 'var(--ds-accent-subtle)';
+  const hovered = kind === 'primary' ? 'var(--ds-accent-hover)' : 'var(--ds-surface-hover)';
   return (
     <span
+      data-ds-interactive
+      data-ds-hover={hover ? 'on' : undefined}
       style={{
+        // Rest and hover both declared here so the single CSS rule in
+        // index.css can swap them without knowing which kind this is.
+        ['--ds-el-bg' as string]: rest,
+        ['--ds-el-bg-hover' as string]: hovered,
+        ['--ds-el-shadow' as string]:
+          kind === 'primary' ? 'var(--ds-shadow-md)' : 'none',
         display: 'inline-flex',
         alignItems: 'center',
         padding: 'var(--ds-space-sm) var(--ds-space-lg)',
@@ -36,12 +57,12 @@ function Button({ children, kind = 'primary' }: { children: string; kind?: 'prim
         fontSize: 'var(--ds-text-sm)',
         fontWeight: 500,
         fontFamily: 'var(--ds-font-body)',
-        boxShadow: kind === 'primary' ? 'var(--ds-shadow-sm)' : 'none',
-        background: kind === 'primary' ? 'var(--ds-accent)' : 'var(--ds-accent-subtle)',
+        textTransform: 'var(--ds-transform)' as CSSProperties['textTransform'],
+        letterSpacing: 'var(--ds-tracking)',
         color: kind === 'primary' ? 'var(--ds-accent-fg)' : 'var(--ds-accent)',
         border:
           kind === 'primary'
-            ? 'var(--ds-border-width) solid transparent'
+            ? 'var(--ds-border-width) solid var(--ds-accent)'
             : 'var(--ds-border-width) solid var(--ds-border)',
         whiteSpace: 'nowrap',
       }}
@@ -51,9 +72,24 @@ function Button({ children, kind = 'primary' }: { children: string; kind?: 'prim
   );
 }
 
+/** The outer wrapper that installs the --ds-* variables and paints the page. */
+export function stage(tokens: DesignTokens, theme?: 'light' | 'dark'): CSSProperties {
+  return {
+    ...toCssVars(tokens, theme),
+    background: 'var(--ds-bg)',
+    backgroundImage: 'var(--ds-bg-image)',
+    color: 'var(--ds-text)',
+    fontFamily: 'var(--ds-font-body)',
+    lineHeight: 'var(--ds-leading)',
+    padding: 'var(--ds-space-xl)',
+    height: '100%',
+    overflow: 'hidden',
+  };
+}
+
 export function Preview({
   params,
-  theme = 'light',
+  theme,
   compact = false,
 }: {
   params: DesignParams;
@@ -63,18 +99,7 @@ export function Preview({
   const tokens = buildTokens(params);
 
   return (
-    <div
-      style={{
-        ...toCssVars(tokens, theme),
-        background: 'var(--ds-bg)',
-        color: 'var(--ds-text)',
-        fontFamily: 'var(--ds-font-body)',
-        lineHeight: 'var(--ds-leading)',
-        padding: 'var(--ds-space-xl)',
-        height: '100%',
-        overflow: 'hidden',
-      }}
-    >
+    <div style={stage(tokens, theme)}>
       {/* nav */}
       <div
         style={{

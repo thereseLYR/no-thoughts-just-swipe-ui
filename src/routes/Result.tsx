@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLocation } from 'wouter';
-import { Download, Link2, Check, RotateCcw, Sun, Moon } from 'lucide-react';
+import { Download, Link2, Check, RotateCcw, Sun, Moon, Sparkles, Terminal } from 'lucide-react';
 import { resolveParams, useSession } from '@/store/session';
 import { ScaledPreview } from '@/components/ScaledPreview';
 import { CodePanel } from '@/components/CodePanel';
@@ -29,9 +29,13 @@ export function ResultView({
   params: DesignParams;
   onOverride?: <K extends AxisKey>(key: K, value: DesignParams[K]) => void;
 }) {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  // The system's own mode is the default; this only records a manual override,
+  // so switching Base in fine-tune still flips the preview.
+  const [themeOverride, setThemeOverride] = useState<'light' | 'dark' | null>(null);
+  const theme = themeOverride ?? params.mode;
   const [active, setActive] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
 
   const tokens = useMemo(() => buildTokens(params), [params]);
   const shareUrl = useMemo(
@@ -47,6 +51,14 @@ export function ResultView({
     }
   }
 
+  async function copyPrompt() {
+    const prompt = files.find((f) => f.path === 'SETUP-PROMPT.md');
+    if (prompt && (await copyText(prompt.contents))) {
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2200);
+    }
+  }
+
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_20rem]">
       <div className="min-w-0 space-y-6">
@@ -54,14 +66,23 @@ export function ResultView({
           <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-2">
             <span className="text-xs text-zinc-400">Preview</span>
             <button
-              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+              onClick={() => setThemeOverride(theme === 'light' ? 'dark' : 'light')}
               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             >
               {theme === 'light' ? <Moon size={13} /> : <Sun size={13} />}
               {theme === 'light' ? 'Dark' : 'Light'}
             </button>
           </div>
-          <ScaledPreview params={params} theme={theme} compact={false} ratio={16 / 10} />
+          {/* Not inside a button here, so real pointer hover works. */}
+          <div data-ds-hoverable>
+            <ScaledPreview
+              params={params}
+              theme={theme}
+              focus="full"
+              compact={false}
+              ratio={16 / 10}
+            />
+          </div>
         </div>
 
         <div>
@@ -85,18 +106,44 @@ export function ResultView({
       </div>
 
       <aside className="space-y-6">
+        {/* The agent path is the recommendation, not a convenience. It is the
+            only one that can adapt to the target project — matching an existing
+            dark-mode convention, avoiding name collisions, finding where styles
+            actually live. The zip cannot do any of that. */}
+        <section className="rounded-xl border border-zinc-700 bg-zinc-900/60 p-4">
+          <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-950">
+            <Sparkles size={11} /> Recommended
+          </div>
+          <h3 className="text-sm font-semibold text-zinc-100">Let your agent set it up</h3>
+          <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
+            One prompt. It inspects your project first — where styles live, how you
+            already do dark mode, what names are taken — then writes the files, wires
+            the imports and adds a pointer to your CLAUDE.md or AGENTS.md.
+          </p>
+          <button
+            onClick={copyPrompt}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-100 px-4 py-3 font-semibold text-zinc-950 transition-colors hover:bg-white"
+          >
+            {promptCopied ? <Check size={16} /> : <Terminal size={16} />}
+            {promptCopied ? 'Copied — paste it in' : 'Copy setup prompt'}
+          </button>
+          <p className="mt-2 text-center text-[11px] text-zinc-500">
+            Claude Code, Cursor, Copilot, or any coding agent
+          </p>
+        </section>
+
         <div className="flex flex-col gap-2">
           <button
             onClick={() => downloadZip(files)}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-100 px-4 py-3 font-semibold text-zinc-950 transition-colors hover:bg-white"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-4 py-2.5 text-sm text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100"
           >
-            <Download size={17} /> Download .zip
+            <Download size={15} /> Download .zip instead
           </button>
           <button
             onClick={share}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 px-4 py-3 text-zinc-200 transition-colors hover:border-zinc-500"
+            className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            {copied ? <Check size={16} /> : <Link2 size={16} />}
+            {copied ? <Check size={15} /> : <Link2 size={15} />}
             {copied ? 'Link copied' : 'Copy share link'}
           </button>
         </div>
