@@ -146,15 +146,34 @@ without a rewrite.
 
 ## Export
 
+The primary path is a **single prompt you paste into a coding agent**, not a
+zip. Three things decide whether a design system survives contact with a real
+project — where the files go, which dark-mode convention is already in use, and
+whether the names collide with what is there. None of them can be answered by a
+file generated in advance, because all three depend on the target project.
+
+So `SETUP-PROMPT.md` does not say "copy these files". It carries the exact
+tokens and the rules, then tells the agent to inspect first — stylesheet
+location, existing `.dark` vs `[data-theme]` convention, name collisions,
+whether the project has `CLAUDE.md` or `AGENTS.md` — and to report what it
+found. That turns all three friction points from user problems into inspection
+steps, and it ends with a pointer for the agent-instructions file so the system
+keeps applying after setup.
+
+The zip stays available for people who would rather wire it up themselves.
+
 | File | What it is |
 | --- | --- |
+| `SETUP-PROMPT.md` | Paste into Claude Code, Cursor, or any coding agent |
 | `app.css` | Tailwind v4 `@theme` block — the source of truth |
-| `tokens.json` | Same tokens as W3C DTCG — the escape hatch for v3 or non-Tailwind |
+| `tokens.json` | Same tokens as W3C DTCG — for v3 or non-Tailwind |
 | `components/` | Button, Card, Input, Badge — hover driven by tokens, not hardcoded shades |
 | `README.md` | Install steps and the contrast audit |
 
 Theme vars are namespaced (`--color-brand-*`), so pasting into an existing
-project extends Tailwind rather than redefining its defaults.
+project extends Tailwind rather than redefining its defaults. The agent prompt
+namespaces further to `--ds-*`, since it has no Tailwind naming constraint to
+satisfy and collision-safety matters more there.
 
 ## Sharing
 
@@ -185,3 +204,7 @@ npm run test:e2e    # playwright
   would help.
 - **No fonts are self-hosted.** Previews and exports both pull Google Fonts over
   the network. `@fontsource-variable/*` would fix the FOUT.
+- **No status colours.** The palette is brand + neutral, so alerts, toasts and
+  validation states have nothing to draw from. The biggest gap for real use.
+- **Focus and disabled are still hardcoded** in the generated components, the
+  same way hover was before it became a token.

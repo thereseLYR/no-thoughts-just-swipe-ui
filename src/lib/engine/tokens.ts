@@ -40,6 +40,8 @@ export type DesignTokens = {
     body: string;
     mono: string;
     families: string[];
+    /** Ready-to-use CSS font stacks, fallbacks matched per family. */
+    stacks: { heading: string; body: string; mono: string };
     scale: Record<'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl', string>;
     weight: { heading: number; body: number; bold: number };
     leading: { tight: string; normal: string };
@@ -67,6 +69,34 @@ const FONTS: Record<TypePairing, { heading: string; body: string; mono: string }
   terminal: { heading: 'JetBrains Mono', body: 'JetBrains Mono', mono: 'JetBrains Mono' },
   brutalist: { heading: 'Archivo', body: 'Archivo', mono: 'JetBrains Mono' },
 };
+
+/**
+ * Fallbacks have to match the font's own category. A hardcoded sans stack sends
+ * a mono heading to a proportional face and a Playfair headline to Helvetica
+ * the moment the webfont fails — which is exactly when the fallback matters.
+ */
+const FONT_CATEGORY: Record<string, 'sans' | 'serif' | 'mono'> = {
+  Poppins: 'sans',
+  Inter: 'sans',
+  'Space Grotesk': 'sans',
+  'Source Sans 3': 'sans',
+  Archivo: 'sans',
+  'Playfair Display': 'serif',
+  Lora: 'serif',
+  'JetBrains Mono': 'mono',
+  'IBM Plex Mono': 'mono',
+};
+
+const FALLBACK: Record<'sans' | 'serif' | 'mono', string> = {
+  sans: 'ui-sans-serif, system-ui, sans-serif',
+  serif: 'ui-serif, Georgia, Cambria, serif',
+  mono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+};
+
+/** Full CSS font stack for a family, fallbacks matched to its category. */
+export function fontStack(family: string): string {
+  return `"${family}", ${FALLBACK[FONT_CATEGORY[family] ?? 'sans']}`;
+}
 
 const DENSITY_UNIT: Record<Density, number> = { tight: 3.5, comfortable: 4, airy: 5 };
 const SPACING_STEPS = { xs: 1, sm: 2, md: 4, lg: 6, xl: 10, '2xl': 16 } as const;
@@ -306,6 +336,11 @@ export function buildTokens(p: DesignParams): DesignTokens {
       body: fonts.body,
       mono: fonts.mono,
       families: [...new Set([fonts.heading, fonts.body, fonts.mono])],
+      stacks: {
+        heading: fontStack(fonts.heading),
+        body: fontStack(fonts.body),
+        mono: fontStack(fonts.mono),
+      },
       scale: {
         xs: scaleAt(-2), sm: scaleAt(-1), base: scaleAt(0), lg: scaleAt(1),
         xl: scaleAt(2), '2xl': scaleAt(3), '3xl': scaleAt(4), '4xl': scaleAt(5),

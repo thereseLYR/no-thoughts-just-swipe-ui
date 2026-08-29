@@ -77,9 +77,9 @@ ${ramps}
 ${semanticBlock(primary)}
 
   /* Typography */
-  --font-heading: "${t.type.heading}", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "${t.type.body}", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "${t.type.mono}", ui-monospace, SFMono-Regular, monospace;
+  --font-heading: ${t.type.stacks.heading};
+  --font-body: ${t.type.stacks.body};
+  --font-mono: ${t.type.stacks.mono};
 ${text}
 
   /* Spacing */

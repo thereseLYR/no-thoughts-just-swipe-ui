@@ -82,6 +82,29 @@ test('an older link is rejected by version rather than silently misread', async 
   await expect(page.getByText(/engine v1/)).toBeVisible();
 });
 
+test('the agent setup prompt is the primary path and copies', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/s/WzMsMSwxMSwzLDAsMSwyLDQsNSwyLDEsMSwwLDEsMCwwXQ');
+
+  await expect(page.getByText('Recommended')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Let your agent set it up' })).toBeVisible();
+
+  // The manual route stays available, just clearly secondary.
+  await expect(page.getByRole('button', { name: /Download \.zip instead/ })).toBeVisible();
+
+  // SETUP-PROMPT.md leads the file list and is what you see first.
+  await expect(page.getByRole('button', { name: 'SETUP-PROMPT.md' })).toBeVisible();
+
+  await page.getByRole('button', { name: /Copy setup prompt/ }).click();
+  await expect(page.getByRole('button', { name: /Copied — paste it in/ })).toBeVisible();
+
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('Set up this design system in my project');
+  expect(copied).toContain('Inspect the project first');
+  expect(copied).toContain('--ds-accent:');
+  expect(copied).toContain('AGENTS.md');
+});
+
 test('hover states are previewable', async ({ page }) => {
   await page.goto('/s/WzMsMSwxMSwzLDAsMSwyLDQsNSwyLDEsMSwwLDEsMCwwXQ');
 

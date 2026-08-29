@@ -4,8 +4,10 @@ import { generateTailwindV4, type ColorFormat } from './tailwind-v4';
 import { generateDtcg } from './dtcg';
 import { generateComponents, type GeneratedFile } from './components';
 import { generateReadme } from './readme';
+import { generateAgentPrompt } from './agent-prompt';
 
 export type { GeneratedFile, ColorFormat };
+export { generateAgentPrompt };
 
 /**
  * The full export set. Returns file descriptors rather than writing or zipping
@@ -17,6 +19,11 @@ export function bundle(
 ): GeneratedFile[] {
   const tokens = buildTokens(params);
   return [
+    {
+      path: 'SETUP-PROMPT.md',
+      contents: generateAgentPrompt(tokens, params),
+      language: 'markdown',
+    },
     { path: 'app.css', contents: generateTailwindV4(tokens, opts.format), language: 'css' },
     { path: 'tokens.json', contents: generateDtcg(tokens), language: 'json' },
     ...generateComponents(tokens, params),
