@@ -26,6 +26,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'solid', depth: 'soft-shadow', typePairing: 'geometric', typeScale: 1.2,
       weightContrast: 'low', textTransform: 'none', radius: 8, borderWeight: 'hairline',
       density: 'comfortable',
+      interaction: 'auto',
     },
   },
   {
@@ -37,6 +38,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'gradient', depth: 'glow', typePairing: 'terminal', typeScale: 1.25,
       weightContrast: 'high', textTransform: 'uppercase', radius: 0, borderWeight: 'medium',
       density: 'tight',
+      interaction: 'auto',
     },
   },
   {
@@ -48,6 +50,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'solid', depth: 'hard-shadow', typePairing: 'brutalist', typeScale: 1.5,
       weightContrast: 'extreme', textTransform: 'uppercase', radius: 0, borderWeight: 'heavy',
       density: 'tight',
+      interaction: 'auto',
     },
   },
   {
@@ -59,6 +62,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'tinted', depth: 'soft-shadow', typePairing: 'geometric', typeScale: 1.2,
       weightContrast: 'low', textTransform: 'none', radius: 9999, borderWeight: 'hairline',
       density: 'airy',
+      interaction: 'auto',
     },
   },
   {
@@ -70,6 +74,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'solid', depth: 'flat', typePairing: 'serif-display', typeScale: 1.5,
       weightContrast: 'high', textTransform: 'none', radius: 0, borderWeight: 'hairline',
       density: 'airy',
+      interaction: 'auto',
     },
   },
   {
@@ -81,6 +86,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'solid', depth: 'bordered', typePairing: 'terminal', typeScale: 1.125,
       weightContrast: 'low', textTransform: 'uppercase', radius: 0, borderWeight: 'hairline',
       density: 'tight',
+      interaction: 'auto',
     },
   },
   {
@@ -92,6 +98,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'gradient', depth: 'glow', typePairing: 'grotesk', typeScale: 1.333,
       weightContrast: 'high', textTransform: 'none', radius: 16, borderWeight: 'hairline',
       density: 'airy',
+      interaction: 'auto',
     },
   },
   {
@@ -103,6 +110,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'solid', depth: 'flat', typePairing: 'grotesk', typeScale: 1.333,
       weightContrast: 'extreme', textTransform: 'uppercase', radius: 0, borderWeight: 'medium',
       density: 'comfortable',
+      interaction: 'auto',
     },
   },
   {
@@ -114,6 +122,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'tinted', depth: 'flat', typePairing: 'humanist', typeScale: 1.125,
       weightContrast: 'low', textTransform: 'none', radius: 16, borderWeight: 'hairline',
       density: 'airy',
+      interaction: 'auto',
     },
   },
   {
@@ -125,6 +134,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'solid', depth: 'bordered', typePairing: 'brutalist', typeScale: 1.333,
       weightContrast: 'extreme', textTransform: 'uppercase', radius: 0, borderWeight: 'heavy',
       density: 'comfortable',
+      interaction: 'auto',
     },
   },
   {
@@ -136,6 +146,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'tinted', depth: 'hard-shadow', typePairing: 'geometric', typeScale: 1.25,
       weightContrast: 'high', textTransform: 'none', radius: 9999, borderWeight: 'medium',
       density: 'comfortable',
+      interaction: 'auto',
     },
   },
   {
@@ -147,6 +158,7 @@ export const PRESETS: readonly Preset[] = [
       surfaceStyle: 'tinted', depth: 'bordered', typePairing: 'mono-accent', typeScale: 1.2,
       weightContrast: 'high', textTransform: 'uppercase', radius: 4, borderWeight: 'medium',
       density: 'comfortable',
+      interaction: 'auto',
     },
   },
 ];

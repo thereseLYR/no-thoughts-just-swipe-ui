@@ -12,7 +12,8 @@ npm run dev
 A design system is a **point in a parameter space**, and a swipe is a comparison
 between two points. No LLM in the loop — deterministic, client-side, bounded.
 
-Fourteen axes (`src/lib/engine/params.ts`), grouped into four facets:
+Fourteen swipeable axes (`src/lib/engine/params.ts`), grouped into four facets,
+plus one that is tuned rather than asked about:
 
 | Facet | Axes |
 | --- | --- |
@@ -20,6 +21,9 @@ Fourteen axes (`src/lib/engine/params.ts`), grouped into four facets:
 | Surface | light/dark, surface treatment, elevation |
 | Type | pairing, scale ratio, weight contrast, heading case |
 | Shape | corner radius, border weight, density |
+
+Hover (`interaction`) is marked `swipeable: false`. It rides in share links and
+appears in fine-tune, but never costs a comparison — see below.
 
 ### The comparison anneals
 
@@ -39,6 +43,37 @@ a real cost, and it is priced in — `recordComparison` discounts each axis by t
 phase weight, so a preset swipe buys 0.4 of an observation rather than a full
 one. What you get back is a strong prior across the whole space in five swipes,
 and an opening that is actually worth swiping through.
+
+### Hover is derived, not asked
+
+Elevation already answers the question. A system whose cards throw a hard offset
+shadow wants buttons that press *into* that shadow; one that glows wants the
+glow to intensify. So `interaction` defaults to `auto` and resolves from `depth`:
+
+| depth | hover |
+| --- | --- |
+| flat, bordered | tint |
+| soft-shadow | lift |
+| hard-shadow | press (moves into the shadow as it shrinks) |
+| glow | glow intensifies |
+
+Overridable in fine-tune. The hover accent is one ramp step further from the
+surface — darker on light themes, lighter on dark — so hovering can only improve
+contrast, never degrade it. There is a test asserting that across every preset
+in both modes.
+
+Previewing it takes two mechanisms, because the swipe card is itself a
+`<button>` and nesting interactive elements is invalid markup:
+
+- **Results screen** — the preview is in a plain `<div>`, so real pointer hover
+  works. Marked `data-ds-hoverable`.
+- **Swipe cards** — rest and hover rendered side by side, labelled. Also better
+  for comparison: four cells visible without moving the mouse, and it works on
+  touch.
+
+Both read `--ds-*` variables through one rule in `index.css`. Base state lives
+there too, not inline — an inline `background` outranks a `:hover` rule and the
+swap silently never happens.
 
 ### The preview shows only what changed
 
@@ -115,7 +150,7 @@ without a rewrite.
 | --- | --- |
 | `app.css` | Tailwind v4 `@theme` block — the source of truth |
 | `tokens.json` | Same tokens as W3C DTCG — the escape hatch for v3 or non-Tailwind |
-| `components/` | Button, Card, Input, Badge |
+| `components/` | Button, Card, Input, Badge — hover driven by tokens, not hardcoded shades |
 | `README.md` | Install steps and the contrast audit |
 
 Theme vars are namespaced (`--color-brand-*`), so pasting into an existing
@@ -148,8 +183,5 @@ npm run test:e2e    # playwright
   legible, but it holds everything outside one facet fixed, so it can't match
   the drama of two whole aesthetics side by side. Varying two facets at once
   would help.
-- **Hover and transition states aren't previewed.** Generated components include
-  them, but a static card can't show them, so "cyberpunk buttons with hover
-  effects" is only half delivered.
 - **No fonts are self-hosted.** Previews and exports both pull Google Fonts over
   the network. `@fontsource-variable/*` would fix the FOUT.

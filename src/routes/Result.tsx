@@ -64,7 +64,16 @@ export function ResultView({
               {theme === 'light' ? 'Dark' : 'Light'}
             </button>
           </div>
-          <ScaledPreview params={params} theme={theme} focus="full" compact={false} ratio={16 / 10} />
+          {/* Not inside a button here, so real pointer hover works. */}
+          <div data-ds-hoverable>
+            <ScaledPreview
+              params={params}
+              theme={theme}
+              focus="full"
+              compact={false}
+              ratio={16 / 10}
+            />
+          </div>
         </div>
 
         <div>

@@ -65,7 +65,7 @@ test('undo steps a swipe back', async ({ page }) => {
 
 test('a share link renders without a local session', async ({ page }) => {
   // The cyberpunk preset: dark, neon magenta, terminal type, uppercase, glow.
-  await page.goto('/s/WzIsMSwxMSwzLDAsMSwyLDQsNSwyLDEsMSwwLDEsMF0');
+  await page.goto('/s/WzMsMSwxMSwzLDAsMSwyLDQsNSwyLDEsMSwwLDEsMCwwXQ');
   await expect(page.getByRole('heading', { name: 'Shared design system' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Remix this/ })).toBeVisible();
 });
@@ -75,9 +75,24 @@ test('a malformed share link fails gracefully', async ({ page }) => {
   await expect(page.getByRole('heading', { name: "Can't open that link" })).toBeVisible();
 });
 
-test('a v1 link is rejected rather than silently misread', async ({ page }) => {
-  // Same encoding, previous engine version — the param space has since changed.
+test('an older link is rejected by version rather than silently misread', async ({ page }) => {
+  // Same encoding, engine v1 — the param space has changed twice since.
   await page.goto('/s/WzEsOSwyLDAsMSwzLDEsNCwyLDMsMV0');
   await expect(page.getByRole('heading', { name: "Can't open that link" })).toBeVisible();
   await expect(page.getByText(/engine v1/)).toBeVisible();
+});
+
+test('hover states are previewable', async ({ page }) => {
+  await page.goto('/s/WzMsMSwxMSwzLDAsMSwyLDQsNSwyLDEsMSwwLDEsMCwwXQ');
+
+  // The results preview is not inside a button, so real pointer hover applies.
+  const hoverable = page.locator('[data-ds-hoverable]');
+  await expect(hoverable).toBeVisible();
+
+  const button = hoverable.locator('[data-ds-interactive]').first();
+  const rest = await button.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await button.hover();
+  await expect
+    .poll(() => button.evaluate((el) => getComputedStyle(el).backgroundColor))
+    .not.toBe(rest);
 });

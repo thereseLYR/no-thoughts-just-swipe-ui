@@ -23,6 +23,44 @@ const centred: CSSProperties = {
   gap: 'var(--ds-space-lg)',
 };
 
+/**
+ * Rest and hover side by side.
+ *
+ * The swipe card is itself a button, so a real pointer hover on a nested
+ * control is not available — nesting interactive elements is invalid markup and
+ * the outer button would eat the click. Showing both states at once is also
+ * simply better for comparison: you can see all four cells without moving the
+ * mouse, and it works on touch.
+ */
+function HoverPair({ children }: { children: string }) {
+  // Fixed px and a neutral stack on purpose. These labels are annotation, not
+  // system output: on --ds-text-xs they inherit the system's scale ratio, which
+  // at 1.5 gives 7px before the card's ~0.7 scale-down — under 5px on screen.
+  // They must also not be restyled by the system under test, or an uppercase
+  // serif system relabels its own controls.
+  const caption: CSSProperties = {
+    fontSize: '14px',
+    lineHeight: 1,
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: 'var(--ds-text-muted)',
+    fontFamily: 'ui-sans-serif, system-ui, sans-serif',
+  };
+  return (
+    <div style={{ display: 'flex', gap: 'var(--ds-space-xl)', alignItems: 'flex-end' }}>
+      <div style={{ display: 'grid', gap: 'var(--ds-space-xs)', justifyItems: 'start' }}>
+        <span style={caption}>rest</span>
+        <Button>{children}</Button>
+      </div>
+      <div style={{ display: 'grid', gap: 'var(--ds-space-xs)', justifyItems: 'start' }}>
+        <span style={caption}>hover</span>
+        <Button hover>{children}</Button>
+      </div>
+    </div>
+  );
+}
+
 function TypeFocus() {
   return (
     <div style={centred}>
@@ -105,7 +143,7 @@ function SurfaceFocus() {
         >
           Track what matters, ignore what doesn't.
         </p>
-        <Button>Open dashboard</Button>
+        <HoverPair>Open dashboard</HoverPair>
       </div>
     </div>
   );
@@ -114,10 +152,7 @@ function SurfaceFocus() {
 function ShapeFocus() {
   return (
     <div style={centred}>
-      <div style={{ display: 'flex', gap: 'var(--ds-space-md)', alignItems: 'center' }}>
-        <Button>Get started</Button>
-        <Button kind="ghost">Cancel</Button>
-      </div>
+      <HoverPair>Get started</HoverPair>
       <div
         style={{
           background: 'var(--ds-surface)',

@@ -7,3 +7,40 @@
 
 html, body, #root { height: 100%; }
 body { background: var(--color-zinc-950); color: var(--color-zinc-100); }
+
+/* ---------------------------------------------------------------------------
+ * Preview interaction states.
+ *
+ * Inline styles cannot express :hover, so the hover swap lives here and reads
+ * the --ds-* variables the preview wrapper installs. Each element declares its
+ * own rest/hover background inline, which keeps one rule working for buttons,
+ * ghost buttons and inputs alike.
+ *
+ * Two ways in:
+ *   [data-ds-hoverable]  a real pointer hover — used where the preview is not
+ *                        itself inside a button (the results screen)
+ *   [data-ds-hover=on]   a forced state, for showing rest and hover side by
+ *                        side on the swipe cards, where nesting a real button
+ *                        inside the card button is not an option
+ * ------------------------------------------------------------------------ */
+/* Base state lives here too, not inline: an inline `background` would win the
+   cascade against the :hover rule below and the swap would silently never
+   happen. Elements pass their values in as variables instead. */
+[data-ds-interactive] {
+  background: var(--ds-el-bg);
+  box-shadow: var(--ds-el-shadow, none);
+  transition: var(--ds-transition, none);
+}
+
+[data-ds-hoverable] [data-ds-interactive]:hover,
+[data-ds-interactive][data-ds-hover='on'] {
+  background: var(--ds-el-bg-hover, var(--ds-accent-hover));
+  box-shadow: var(--ds-hover-shadow);
+  transform: var(--ds-hover-transform);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ds-interactive] {
+    transition: none;
+  }
+}

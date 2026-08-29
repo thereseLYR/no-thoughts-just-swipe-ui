@@ -4,7 +4,7 @@ import { AXES, axis, defaultParams, type AxisKey, type DesignParams } from './pa
 import { PRESETS } from './presets';
 import { simulate, distanceTo } from './__testing__/simulatedUser';
 import { brandRamp, neutralRamp, contrast, RAMP_STOPS } from './color';
-import { buildTokens } from './tokens';
+import { buildTokens, resolveInteraction } from './tokens';
 import {
   initBeliefs, recordChoice, recordComparison, bestIndex, normalizedEntropy, confidence,
 } from './scoring';
@@ -214,13 +214,72 @@ describe('presets', () => {
   });
 });
 
+describe('interaction', () => {
+  it('derives from elevation when set to auto', () => {
+    const cases = [
+      ['flat', 'tint'], ['bordered', 'tint'], ['soft-shadow', 'lift'],
+      ['hard-shadow', 'press'], ['glow', 'glow'],
+    ] as const;
+    for (const [depth, expected] of cases) {
+      const p = { ...defaultParams(), depth, interaction: 'auto' } as DesignParams;
+      expect(resolveInteraction(p), depth).toBe(expected);
+      expect(buildTokens(p).interaction.style).toBe(expected);
+    }
+  });
+
+  it('respects an explicit override', () => {
+    const p = { ...defaultParams(), depth: 'flat', interaction: 'glow' } as DesignParams;
+    expect(resolveInteraction(p)).toBe('glow');
+  });
+
+  it('keeps the hover accent readable across the whole space', () => {
+    for (const preset of PRESETS) {
+      for (const mode of ['light', 'dark'] as const) {
+        const c = buildTokens({ ...preset.params, mode }).color[mode];
+        expect(contrast(c.accentFg, c.accentHover), `${preset.id}/${mode}`)
+          .toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('moves the hover accent away from the surface, never toward it', () => {
+    for (const preset of PRESETS) {
+      const light = buildTokens({ ...preset.params, mode: 'light' }).color.light;
+      // Darker on light themes: more contrast against a light surface, so a
+      // hover can never make a control harder to read.
+      expect(contrast(light.accentHover, light.surface), preset.id)
+        .toBeGreaterThanOrEqual(contrast(light.accent, light.surface) - 0.01);
+    }
+  });
+
+  it('never costs a swipe', () => {
+    let beliefs = initBeliefs();
+    const rng = mulberry32(21);
+    const asked = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const pair = nextPair(beliefs, i, rng, asked);
+      if (!pair) break;
+      // The vibe round varies whole presets, but they all share interaction.
+      expect(pair.diffs.map((d) => d.axis)).not.toContain('interaction');
+      beliefs = recordComparison(beliefs, pair.diffs, PHASE_WEIGHT[pair.kind]);
+      asked.add(pair.id);
+    }
+  });
+
+  it('still round-trips through a share link', () => {
+    const p = { ...defaultParams(), interaction: 'press' } as DesignParams;
+    const decoded = decodeParams(encodeParams(p));
+    expect(decoded.ok && decoded.params.interaction).toBe('press');
+  });
+});
+
 describe('share seeds', () => {
   it('round-trip losslessly', () => {
     const params: DesignParams = {
       mode: 'dark', hue: 270, chroma: 'neon', neutralTemp: 'warm', accentUsage: 'bold',
       surfaceStyle: 'gradient', depth: 'glow', typePairing: 'terminal', typeScale: 1.333,
       weightContrast: 'extreme', textTransform: 'uppercase', radius: 16,
-      borderWeight: 'heavy', density: 'airy',
+      borderWeight: 'heavy', density: 'airy', interaction: 'lift',
     };
     const result = decodeParams(encodeParams(params));
     expect(result.ok && result.params).toEqual(params);
@@ -258,15 +317,15 @@ describe('convergence', () => {
     { mode: 'dark', hue: 300, chroma: 'neon', neutralTemp: 'cool', accentUsage: 'bold',
       surfaceStyle: 'gradient', depth: 'glow', typePairing: 'terminal', typeScale: 1.25,
       weightContrast: 'high', textTransform: 'uppercase', radius: 0,
-      borderWeight: 'medium', density: 'tight' },
+      borderWeight: 'medium', density: 'tight', interaction: 'auto' },
     { mode: 'light', hue: 30, chroma: 'muted', neutralTemp: 'warm', accentUsage: 'subtle',
       surfaceStyle: 'solid', depth: 'flat', typePairing: 'serif-display', typeScale: 1.5,
       weightContrast: 'high', textTransform: 'none', radius: 0,
-      borderWeight: 'hairline', density: 'airy' },
+      borderWeight: 'hairline', density: 'airy', interaction: 'auto' },
     { mode: 'light', hue: 150, chroma: 'balanced', neutralTemp: 'pure', accentUsage: 'bold',
       surfaceStyle: 'tinted', depth: 'hard-shadow', typePairing: 'brutalist', typeScale: 1.333,
       weightContrast: 'extreme', textTransform: 'uppercase', radius: 9999,
-      borderWeight: 'heavy', density: 'comfortable' },
+      borderWeight: 'heavy', density: 'comfortable', interaction: 'auto' },
   ];
 
   it('lands close to hidden preferences within the swipe budget', () => {
@@ -307,6 +366,19 @@ describe('bundle', () => {
     const json = bundle(defaultParams()).find((f) => f.path === 'tokens.json')!;
     const parsed = JSON.parse(json.contents);
     expect(parsed.color.brand['500'].$type).toBe('color');
+  });
+
+  it('emits hover as tokens rather than hardcoded shades', () => {
+    const files = bundle(defaultParams());
+    const css = files.find((f) => f.path === 'app.css')!.contents;
+    expect(css).toContain('--color-accent-hover');
+    expect(css).toContain('--shadow-hover');
+    expect(css).toContain('--hover-transform');
+    expect(css).toContain('prefers-reduced-motion');
+
+    const button = files.find((f) => f.path === 'components/Button.tsx')!.contents;
+    expect(button).toContain('hover:bg-accent-hover');
+    expect(button).not.toMatch(/hover:bg-brand-\d/);
   });
 
   it('namespaces theme vars so it will not clobber Tailwind defaults', () => {

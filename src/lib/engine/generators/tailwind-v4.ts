@@ -89,7 +89,20 @@ ${spacing}
   /* Shape */
 ${radius}
 ${shadow}
+  --shadow-hover: ${t.interaction.shadow};
   --border-width-default: ${t.borderWidth};
+}
+
+/* Interaction. Derived from elevation: ${t.interaction.style}. */
+:root {
+  --hover-transform: ${t.interaction.transform};
+  --interactive-transition: ${t.interaction.transition};
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --interactive-transition: none;
+  }
 }
 
 /* The opposite mode swaps only the semantic layer; the ramps are shared. */

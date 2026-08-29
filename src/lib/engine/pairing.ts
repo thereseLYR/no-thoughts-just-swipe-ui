@@ -18,7 +18,7 @@
  * against its closest rival.
  */
 import {
-  AXES, FACETS, FACET_LABELS, axesInFacet, axis, paramDistance,
+  AXES, FACETS, FACET_LABELS, SWIPEABLE_AXES, axesInFacet, axis, paramDistance,
   type AxisKey, type DesignParams, type Facet,
 } from './params';
 import { PRESETS, type Preset } from './presets';
@@ -248,7 +248,7 @@ function axisPair(
   rng: () => number,
   asked: ReadonlySet<string>,
 ): Pair | null {
-  const candidates = AXES.filter((a) => !isSettled(beliefs, a.key)).sort((x, y) => {
+  const candidates = SWIPEABLE_AXES.filter((a) => !isSettled(beliefs, a.key)).sort((x, y) => {
     const xShort = beliefs.asks[x.key] < minAsks(x.key) ? 1 : 0;
     const yShort = beliefs.asks[y.key] < minAsks(y.key) ? 1 : 0;
     if (xShort !== yShort) return yShort - xShort;
@@ -326,5 +326,5 @@ export function focusFor(pair: Pair): Facet | 'full' {
 }
 
 export function allSettled(beliefs: Beliefs): boolean {
-  return AXES.every((a) => isSettled(beliefs, a.key));
+  return SWIPEABLE_AXES.every((a) => isSettled(beliefs, a.key));
 }

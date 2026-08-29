@@ -10,7 +10,7 @@
  * the softmax enough to look confident while carrying almost no information, so
  * we also require a minimum number of observations before an axis can retire.
  */
-import { AXES, axis, type AxisKey, type DesignParams } from './params';
+import { AXES, SWIPEABLE_AXES, axis, isSwipeable, type AxisKey, type DesignParams } from './params';
 
 export type Beliefs = {
   scores: Record<AxisKey, number[]>;
@@ -134,6 +134,9 @@ export function normalizedEntropy(beliefs: Beliefs, key: AxisKey): number {
 }
 
 export function isSettled(beliefs: Beliefs, key: AxisKey): boolean {
+  // Tuned-not-swiped axes have nothing to learn; treat them as decided so they
+  // never hold a session open waiting for evidence that will not arrive.
+  if (!isSwipeable(key)) return true;
   // Nothing left to ask means nothing left to learn, whatever the entropy says.
   if (beliefs.asks[key] >= availablePairs(key)) return true;
   if (beliefs.asks[key] < minAsks(key)) return false;
@@ -145,7 +148,7 @@ export function isSettled(beliefs: Beliefs, key: AxisKey): boolean {
  * answers are, so the bar moves on every swipe rather than jumping at the end.
  */
 export function confidence(beliefs: Beliefs): number {
-  const parts = AXES.map((a) => {
+  const parts = SWIPEABLE_AXES.map((a) => {
     const asked = Math.min(1, beliefs.asks[a.key] / minAsks(a.key));
     const decided = 1 - normalizedEntropy(beliefs, a.key);
     return 0.5 * asked + 0.5 * decided;

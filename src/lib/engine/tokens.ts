@@ -2,9 +2,9 @@
  * DesignParams -> DesignTokens. The single transform every generator reads
  * from, so all export formats stay in sync by construction.
  */
-import { brandRamp, neutralRamp, contrast, type Ramp, type RampStop } from './color';
+import { RAMP_STOPS, brandRamp, neutralRamp, contrast, type Ramp, type RampStop } from './color';
 import type {
-  BorderWeight, DesignParams, Density, Depth, Mode, SurfaceStyle,
+  BorderWeight, DesignParams, Density, Depth, Interaction, Mode, SurfaceStyle,
   TextTransform, TypePairing, WeightContrast,
 } from './params';
 
@@ -19,6 +19,9 @@ export type SemanticColors = {
   accent: string;
   accentFg: string;
   accentSubtle: string;
+  /** One ramp step further from the surface — verified against accentFg. */
+  accentHover: string;
+  surfaceHover: string;
 };
 
 export type DesignTokens = {
@@ -44,6 +47,13 @@ export type DesignTokens = {
     tracking: string;
   };
   shadow: { sm: string; md: string; lg: string };
+  /** Hover is derived from elevation, not asked about — see resolveInteraction. */
+  interaction: {
+    style: ResolvedInteraction;
+    transform: string;
+    shadow: string;
+    transition: string;
+  };
   borderWidth: string;
   audit: { textOnBg: number; accentOnSurface: number; accentFgOnAccent: number };
 };
@@ -66,6 +76,55 @@ const BORDER_PX: Record<BorderWeight, number> = { hairline: 1, medium: 2, heavy:
 
 /** The sentinel the radius axis uses for "fully rounded". */
 const PILL = 9999;
+
+export type ResolvedInteraction = Exclude<Interaction, 'auto'>;
+
+/**
+ * Elevation already answers this question. A system whose cards throw a hard
+ * offset shadow wants buttons that press INTO that shadow; one that glows wants
+ * the glow to intensify. Asking the user separately would cost swipes to learn
+ * something the rest of their choices already implied.
+ */
+const INTERACTION_FOR_DEPTH: Record<Depth, ResolvedInteraction> = {
+  flat: 'tint',
+  bordered: 'tint',
+  'soft-shadow': 'lift',
+  'hard-shadow': 'press',
+  glow: 'glow',
+};
+
+export function resolveInteraction(p: DesignParams): ResolvedInteraction {
+  return p.interaction === 'auto' ? INTERACTION_FOR_DEPTH[p.depth] : p.interaction;
+}
+
+/** Press wants to feel immediate; a glow wants time to bloom. */
+const TRANSITION: Record<ResolvedInteraction, string> = {
+  tint: '160ms cubic-bezier(0.4, 0, 0.2, 1)',
+  lift: '160ms cubic-bezier(0.4, 0, 0.2, 1)',
+  press: '90ms cubic-bezier(0.4, 0, 0.2, 1)',
+  glow: '220ms cubic-bezier(0.4, 0, 0.2, 1)',
+};
+
+const TRANSFORM: Record<ResolvedInteraction, string> = {
+  tint: 'none',
+  lift: 'translateY(-1px)',
+  // Move into the shadow, which shrinks by the same amount below, so the
+  // element reads as pressed rather than merely nudged.
+  press: 'translate(2px, 2px)',
+  glow: 'none',
+};
+
+function interactionTokens(
+  style: ResolvedInteraction,
+  shadow: DesignTokens['shadow'],
+): DesignTokens['interaction'] {
+  return {
+    style,
+    transform: TRANSFORM[style],
+    shadow: style === 'press' ? shadow.sm : style === 'tint' ? shadow.md : shadow.lg,
+    transition: `all ${TRANSITION[style]}`,
+  };
+}
 
 function shadows(depth: Depth, neutral: Ramp, accent: string): DesignTokens['shadow'] {
   switch (depth) {
@@ -113,15 +172,31 @@ function accentPair(
   neutral: Ramp,
   surface: string,
   stops: readonly RampStop[],
-): { accent: string; fg: string } {
-  let fallback = { accent: brand[stops[0]!], fg: foregroundFor(brand[stops[0]!], neutral) };
+): { accent: string; fg: string; stop: RampStop } {
+  let fallback = {
+    accent: brand[stops[0]!],
+    fg: foregroundFor(brand[stops[0]!], neutral),
+    stop: stops[0]!,
+  };
   for (const stop of stops) {
     const accent = brand[stop];
     const fg = foregroundFor(accent, neutral);
-    if (contrast(fg, accent) >= 4.5 && contrast(accent, surface) >= 4.5) return { accent, fg };
-    fallback = { accent, fg };
+    if (contrast(fg, accent) >= 4.5 && contrast(accent, surface) >= 4.5) return { accent, fg, stop };
+    fallback = { accent, fg, stop };
   }
   return fallback;
+}
+
+/**
+ * The hover accent is one ramp step further from the surface — darker on a
+ * light theme, lighter on a dark one. Moving away from the surface can only
+ * improve contrast against it, and it keeps the foreground label readable.
+ */
+function hoverAccent(brand: Ramp, stop: RampStop, mode: Mode): string {
+  const i = RAMP_STOPS.indexOf(stop);
+  const next = mode === 'light' ? i + 1 : i - 1;
+  const clamped = Math.min(RAMP_STOPS.length - 1, Math.max(0, next));
+  return brand[RAMP_STOPS[clamped]!];
 }
 
 const LIGHT_STOPS: Record<'bold' | 'subtle', readonly RampStop[]> = {
@@ -183,6 +258,8 @@ export function buildTokens(p: DesignParams): DesignTokens {
     accent: lightPair.accent,
     accentFg: lightPair.fg,
     accentSubtle: brand[100],
+    accentHover: hoverAccent(brand, lightPair.stop, 'light'),
+    surfaceHover: neutral[100],
   };
 
   const dark: SemanticColors = {
@@ -194,6 +271,8 @@ export function buildTokens(p: DesignParams): DesignTokens {
     accent: darkPair.accent,
     accentFg: darkPair.fg,
     accentSubtle: neutral[800],
+    accentHover: hoverAccent(brand, darkPair.stop, 'dark'),
+    surfaceHover: neutral[800],
   };
 
   const unit = DENSITY_UNIT[p.density];
@@ -205,6 +284,7 @@ export function buildTokens(p: DesignParams): DesignTokens {
   const fonts = FONTS[p.typePairing];
   const scaleAt = (n: number) => `${+(16 * p.typeScale ** n).toFixed(2)}px`;
   const primary = p.mode === 'dark' ? dark : light;
+  const shadowSet = shadows(p.depth, neutral, primary.accent);
 
   return {
     mode: p.mode,
@@ -236,7 +316,8 @@ export function buildTokens(p: DesignParams): DesignTokens {
       // Uppercase without tracking looks cramped; lowercase with it looks loose.
       tracking: p.textTransform === 'uppercase' ? '0.06em' : '-0.01em',
     },
-    shadow: shadows(p.depth, neutral, primary.accent),
+    shadow: shadowSet,
+    interaction: interactionTokens(resolveInteraction(p), shadowSet),
     borderWidth: `${p.depth === 'bordered' ? Math.max(borderPx, 2) : borderPx}px`,
     audit: {
       textOnBg: +contrast(primary.text, primary.bg).toFixed(2),

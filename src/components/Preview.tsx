@@ -30,13 +30,26 @@ export const heading: CSSProperties = {
 export function Button({
   children,
   kind = 'primary',
+  hover,
 }: {
   children: string;
   kind?: 'primary' | 'ghost';
+  /** Force the hover state on, for side-by-side rest/hover specimens. */
+  hover?: boolean;
 }) {
+  const rest = kind === 'primary' ? 'var(--ds-accent)' : 'var(--ds-accent-subtle)';
+  const hovered = kind === 'primary' ? 'var(--ds-accent-hover)' : 'var(--ds-surface-hover)';
   return (
     <span
+      data-ds-interactive
+      data-ds-hover={hover ? 'on' : undefined}
       style={{
+        // Rest and hover both declared here so the single CSS rule in
+        // index.css can swap them without knowing which kind this is.
+        ['--ds-el-bg' as string]: rest,
+        ['--ds-el-bg-hover' as string]: hovered,
+        ['--ds-el-shadow' as string]:
+          kind === 'primary' ? 'var(--ds-shadow-md)' : 'none',
         display: 'inline-flex',
         alignItems: 'center',
         padding: 'var(--ds-space-sm) var(--ds-space-lg)',
@@ -44,10 +57,8 @@ export function Button({
         fontSize: 'var(--ds-text-sm)',
         fontWeight: 500,
         fontFamily: 'var(--ds-font-body)',
-        boxShadow: kind === 'primary' ? 'var(--ds-shadow-md)' : 'none',
         textTransform: 'var(--ds-transform)' as CSSProperties['textTransform'],
         letterSpacing: 'var(--ds-tracking)',
-        background: kind === 'primary' ? 'var(--ds-accent)' : 'var(--ds-accent-subtle)',
         color: kind === 'primary' ? 'var(--ds-accent-fg)' : 'var(--ds-accent)',
         border:
           kind === 'primary'

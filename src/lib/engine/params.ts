@@ -11,8 +11,8 @@
  * so it can be unit tested, run in a worker, or moved server-side later.
  */
 
-/** Bumped from 1: the parameter space gained four axes and several values. */
-export const ENGINE_VERSION = 2;
+/** Bumped from 2: hover became a token rather than a hardcoded class string. */
+export const ENGINE_VERSION = 3;
 
 export type Mode = 'light' | 'dark';
 export type ChromaLevel = 'muted' | 'balanced' | 'vivid' | 'neon';
@@ -31,6 +31,8 @@ export type WeightContrast = 'low' | 'high' | 'extreme';
 export type AccentUsage = 'subtle' | 'bold';
 export type TextTransform = 'none' | 'uppercase';
 export type SurfaceStyle = 'solid' | 'tinted' | 'gradient';
+/** 'auto' derives from depth — see resolveInteraction in tokens.ts. */
+export type Interaction = 'auto' | 'tint' | 'lift' | 'press' | 'glow';
 
 export type DesignParams = {
   mode: Mode;
@@ -47,6 +49,7 @@ export type DesignParams = {
   radius: number;
   borderWeight: BorderWeight;
   density: Density;
+  interaction: Interaction;
 };
 
 export type BorderWeight = 'hairline' | 'medium' | 'heavy';
@@ -69,6 +72,13 @@ type AxisDefFor<K extends AxisKey> = {
   key: K;
   label: string;
   facet: Facet;
+  /**
+   * False for axes that are tuned rather than swiped. They still ride in share
+   * links and the fine-tune panel; they just never cost anyone a comparison.
+   * Hover is the case this exists for: nobody has a prior opinion about it
+   * until they have seen the rest of the system.
+   */
+  swipeable?: boolean;
   /** Ordinal axes give partial credit to neighbouring values. */
   ordinal: boolean;
   /** Hue wraps: index 11 neighbours index 0. */
@@ -209,7 +219,23 @@ export const AXES: readonly AxisDef[] = [
     values: ['tight', 'comfortable', 'airy'],
     describe: (v) => v,
   },
+  {
+    key: 'interaction',
+    label: 'Hover',
+    facet: 'surface',
+    swipeable: false,
+    ordinal: false,
+    values: ['auto', 'tint', 'lift', 'press', 'glow'],
+    describe: (v) => (v === 'auto' ? 'match elevation' : v),
+  },
 ];
+
+/** The axes that actually cost a swipe. */
+export const SWIPEABLE_AXES: readonly AxisDef[] = AXES.filter((a) => a.swipeable !== false);
+
+export function isSwipeable(key: AxisKey): boolean {
+  return axis(key).swipeable !== false;
+}
 
 export function axis(key: AxisKey): AxisDef {
   const found = AXES.find((a) => a.key === key);
@@ -218,7 +244,7 @@ export function axis(key: AxisKey): AxisDef {
 }
 
 export function axesInFacet(facet: Facet): readonly AxisDef[] {
-  return AXES.filter((a) => a.facet === facet);
+  return SWIPEABLE_AXES.filter((a) => a.facet === facet);
 }
 
 /** Midpoint of every axis — the neutral prior before any swipes. */
