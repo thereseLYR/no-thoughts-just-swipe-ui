@@ -14,8 +14,13 @@ import { AXES, axis, type AxisKey, type DesignParams } from './params';
 
 export type Beliefs = {
   scores: Record<AxisKey, number[]>;
+  /** Fractional: a confounded multi-axis comparison is worth less than a
+   *  targeted one, so it buys each axis only part of an observation. */
   asks: Record<AxisKey, number>;
 };
+
+/** One axis's contribution to a comparison. */
+export type Diff = { axis: AxisKey; winnerIdx: number; loserIdx: number };
 
 const WIN = 1;
 const LOSS = -0.6;
@@ -62,28 +67,47 @@ function kernel(d: number, ordinal: boolean): number {
   return Math.exp(-(d ** 2) / 2);
 }
 
+/**
+ * Apply one comparison across every axis that differed.
+ *
+ * `weight` is the confidence discount. Choosing between two complete aesthetics
+ * says something about all twelve axes that differ, but it does not say which
+ * of them drove the choice — so each gets a fraction of a full observation.
+ * A single-axis comparison is unconfounded and gets the full weight.
+ */
+export function recordComparison(beliefs: Beliefs, diffs: readonly Diff[], weight = 1): Beliefs {
+  const scores = { ...beliefs.scores };
+  const asks = { ...beliefs.asks };
+
+  for (const { axis: key, winnerIdx, loserIdx } of diffs) {
+    const a = axis(key);
+    const len = a.values.length;
+    const circular = a.circular ?? false;
+    const next = [...beliefs.scores[key]];
+
+    for (let i = 0; i < len; i++) {
+      next[i] =
+        (next[i] ?? 0) +
+        weight *
+          (WIN * kernel(distance(i, winnerIdx, len, circular), a.ordinal) +
+            LOSS * kernel(distance(i, loserIdx, len, circular), a.ordinal));
+    }
+
+    scores[key] = next;
+    asks[key] = (asks[key] ?? 0) + weight;
+  }
+
+  return { scores, asks };
+}
+
+/** Single-axis convenience wrapper — an unconfounded comparison. */
 export function recordChoice(
   beliefs: Beliefs,
   key: AxisKey,
   winnerIdx: number,
   loserIdx: number,
 ): Beliefs {
-  const a = axis(key);
-  const len = a.values.length;
-  const circular = a.circular ?? false;
-  const scores = [...beliefs.scores[key]];
-
-  for (let i = 0; i < len; i++) {
-    scores[i] =
-      (scores[i] ?? 0) +
-      WIN * kernel(distance(i, winnerIdx, len, circular), a.ordinal) +
-      LOSS * kernel(distance(i, loserIdx, len, circular), a.ordinal);
-  }
-
-  return {
-    scores: { ...beliefs.scores, [key]: scores },
-    asks: { ...beliefs.asks, [key]: beliefs.asks[key] + 1 },
-  };
+  return recordComparison(beliefs, [{ axis: key, winnerIdx, loserIdx }], 1);
 }
 
 export function distribution(beliefs: Beliefs, key: AxisKey): number[] {

@@ -1,6 +1,7 @@
 import { motion, useMotionValue, useTransform, animate } from 'motion/react';
 import { useEffect } from 'react';
 import { ScaledPreview } from './ScaledPreview';
+import type { Focus } from './FocusView';
 import type { DesignParams } from '@/lib/engine/params';
 
 const THRESHOLD = 90;
@@ -14,12 +15,16 @@ export function SwipeCard({
   params,
   side,
   label,
+  blurb,
+  focus,
   onPick,
   disabled,
 }: {
   params: DesignParams;
   side: 'a' | 'b';
   label: string;
+  blurb?: string;
+  focus: Focus;
   onPick: () => void;
   disabled?: boolean;
 }) {
@@ -54,10 +59,13 @@ export function SwipeCard({
         style={{ opacity: glow }}
         className="pointer-events-none absolute inset-0 z-10 bg-zinc-100/10"
       />
-      <ScaledPreview params={params} />
-      <div className="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
-        <span className="text-sm font-medium text-zinc-300">{label}</span>
-        <kbd className="rounded border border-zinc-700 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
+      <ScaledPreview params={params} focus={focus} />
+      <div className="flex items-start justify-between gap-3 border-t border-zinc-800 px-4 py-3">
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-zinc-200">{label}</span>
+          {blurb && <span className="mt-0.5 block text-xs text-zinc-500">{blurb}</span>}
+        </span>
+        <kbd className="shrink-0 rounded border border-zinc-700 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
           {side === 'a' ? '←' : '→'}
         </kbd>
       </div>

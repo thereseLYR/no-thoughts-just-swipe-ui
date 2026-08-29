@@ -1,56 +1,55 @@
 import { it, expect } from 'vitest';
-import { AXES, axis, type DesignParams, type AxisKey } from './params';
-import { initBeliefs, recordChoice, paramsFromBeliefs } from './scoring';
-import { nextPair, mulberry32, pairKey } from './pairing';
+import { AXES, type AxisKey, type DesignParams } from './params';
+import { mulberry32 } from './pairing';
+import { simulate, distanceTo } from './__testing__/simulatedUser';
 
 /**
  * Aggregate quality gate over 300 random hidden preferences. Guards against
- * tuning changes (BETA, SETTLED, minAsks, the scan budget) that look harmless
- * on one case but quietly wreck convergence or balloon the swipe count.
+ * tuning changes (BETA, SETTLED, minAsks, phase lengths, PHASE_WEIGHT) that
+ * look harmless on one case but quietly wreck convergence.
+ *
+ * The metric is distance, not exact matches. The vibe round is deliberately
+ * confounded — it trades some per-axis precision for an opening that is
+ * actually worth swiping through — so demanding exact recovery would be
+ * measuring the wrong thing.
  */
 it('converges across the whole parameter space', () => {
-  const rows: Array<{ acc: number; swipes: number }> = [];
+  const rows: Array<{ distance: number; swipes: number; naive: number }> = [];
+
   for (let trial = 0; trial < 300; trial++) {
-    const rng0 = mulberry32(trial * 977 + 13);
+    const pick = mulberry32(trial * 977 + 13);
     const target = {} as Record<AxisKey, unknown>;
-    for (const a of AXES) target[a.key] = a.values[Math.floor(rng0() * a.values.length)];
+    for (const a of AXES) target[a.key] = a.values[Math.floor(pick() * a.values.length)];
     const t = target as DesignParams;
 
-    let b = initBeliefs(); const rng = mulberry32(trial + 1); const asked = new Set<string>();
-    let swipes = 0;
-    for (let stage = 0; stage < 4; stage++) {
-      for (let g = 0; g < 60; g++) {
-        const pair = nextPair(b, stage, rng, asked);
-        if (!pair) break;
-        const def = axis(pair.axis);
-        const want = (def.values as readonly unknown[]).indexOf(t[pair.axis]);
-        const len = def.values.length;
-        const d = (i: number) => { const r = Math.abs(i - want); return def.circular ? Math.min(r, len - r) : r; };
-        const [w, l] = d(pair.aIndex) <= d(pair.bIndex) ? [pair.aIndex, pair.bIndex] : [pair.bIndex, pair.aIndex];
-        b = recordChoice(b, pair.axis, w, l);
-        asked.add(pairKey(pair.axis, pair.aIndex, pair.bIndex));
-        swipes++;
-      }
-    }
-    const got = paramsFromBeliefs(b);
-    rows.push({ acc: AXES.filter((a) => got[a.key] === t[a.key]).length / AXES.length, swipes });
+    const result = simulate(t, trial + 1);
+
+    // Baseline: a random point in the space, for the same target.
+    const randomPoint = {} as Record<AxisKey, unknown>;
+    for (const a of AXES) randomPoint[a.key] = a.values[Math.floor(pick() * a.values.length)];
+
+    rows.push({
+      distance: distanceTo(t, result.params),
+      swipes: result.swipes,
+      naive: distanceTo(t, randomPoint as DesignParams),
+    });
   }
-  const mean = (f: (r: typeof rows[0]) => number) => rows.reduce((s, r) => s + f(r), 0) / rows.length;
+
+  const mean = (f: (r: (typeof rows)[0]) => number) =>
+    rows.reduce((s, r) => s + f(r), 0) / rows.length;
+  const distances = rows.map((r) => r.distance).sort((a, b) => a - b);
   const swipes = rows.map((r) => r.swipes).sort((a, b) => a - b);
-  const accs = rows.map((r) => r.acc).sort((a, b) => a - b);
-  const exact = rows.filter((r) => r.acc === 1).length / rows.length;
-  const overEighty = rows.filter((r) => r.acc >= 0.8).length / rows.length;
+  const beatsRandom = rows.filter((r) => r.distance < r.naive).length / rows.length;
 
-  expect(mean((r) => r.acc)).toBeGreaterThan(0.9);
-  expect(overEighty).toBeGreaterThanOrEqual(0.99);
-  expect(exact).toBeGreaterThan(0.4);
-  // Session length is a product constraint, not just an engine one.
-  expect(mean((r) => r.swipes)).toBeLessThan(34);
-  expect(swipes.at(-1)!).toBeLessThanOrEqual(40);
+  expect(mean((r) => r.distance)).toBeLessThan(mean((r) => r.naive) * 0.65);
+  expect(beatsRandom).toBeGreaterThan(0.9);
+  expect(mean((r) => r.swipes)).toBeLessThanOrEqual(26);
 
-  console.log(`trials            ${rows.length}`);
-  console.log(`swipes  mean ${mean((r) => r.swipes).toFixed(1)}  min ${swipes[0]}  p50 ${swipes[150]}  max ${swipes.at(-1)}`);
-  console.log(`accuracy mean ${(mean((r) => r.acc) * 100).toFixed(1)}%  p10 ${(accs[30]! * 100).toFixed(0)}%  worst ${(accs[0]! * 100).toFixed(0)}%`);
-  console.log(`exact (10/10)  ${((rows.filter((r) => r.acc === 1).length / rows.length) * 100).toFixed(0)}%`);
-  console.log(`>=80%          ${(overEighty * 100).toFixed(1)}%`);
+  console.log(`trials         ${rows.length}`);
+  console.log(
+    `distance  mean ${mean((r) => r.distance).toFixed(2)}  p50 ${distances[150]!.toFixed(2)}` +
+      `  worst ${distances.at(-1)!.toFixed(2)}  (random baseline ${mean((r) => r.naive).toFixed(2)})`,
+  );
+  console.log(`swipes    mean ${mean((r) => r.swipes).toFixed(1)}  min ${swipes[0]}  max ${swipes.at(-1)}`);
+  console.log(`beats random   ${(beatsRandom * 100).toFixed(1)}%`);
 });

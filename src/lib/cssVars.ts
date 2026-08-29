@@ -6,10 +6,12 @@ import type { DesignTokens } from './engine/tokens';
  * rebuilt Tailwind classes. That is what lets two swipe cards render identical
  * markup under different token sets, and makes the fine-tune step instant.
  */
-export function toCssVars(t: DesignTokens, theme: 'light' | 'dark' = 'light'): CSSProperties {
-  const semantic = t.color[theme];
+export function toCssVars(t: DesignTokens, theme?: 'light' | 'dark'): CSSProperties {
+  // A system that leads with dark should preview dark unless asked otherwise.
+  const semantic = t.color[theme ?? t.mode];
   const vars: Record<string, string> = {
     '--ds-bg': semantic.bg,
+    '--ds-bg-image': semantic.bgImage ?? 'none',
     '--ds-surface': semantic.surface,
     '--ds-border': semantic.border,
     '--ds-text': semantic.text,
@@ -29,6 +31,8 @@ export function toCssVars(t: DesignTokens, theme: 'light' | 'dark' = 'light'): C
     '--ds-weight-heading': String(t.type.weight.heading),
     '--ds-leading': t.type.leading.normal,
     '--ds-leading-tight': t.type.leading.tight,
+    '--ds-transform': t.type.transform,
+    '--ds-tracking': t.type.tracking,
   };
   for (const [k, v] of Object.entries(t.spacing)) vars[`--ds-space-${k}`] = v;
   for (const [k, v] of Object.entries(t.type.scale)) vars[`--ds-text-${k}`] = v;

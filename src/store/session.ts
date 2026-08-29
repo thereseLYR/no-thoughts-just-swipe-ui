@@ -1,17 +1,22 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { STAGE_COUNT, type AxisKey, type DesignParams } from '@/lib/engine/params';
+import { type AxisKey, type DesignParams } from '@/lib/engine/params';
 import {
-  initBeliefs, recordChoice, paramsFromBeliefs, confidence, withAxis, type Beliefs,
+  initBeliefs, recordComparison, paramsFromBeliefs, confidence, withAxis, type Beliefs,
 } from '@/lib/engine/scoring';
-import { mulberry32, nextPair, pairKey, type Pair } from '@/lib/engine/pairing';
+import {
+  allSettled, diffsForWinner, mulberry32, nextPair, phaseFor, PHASE_WEIGHT,
+  VIBE_SWIPES, FACET_SWIPES, type Pair,
+} from '@/lib/engine/pairing';
 
-type Snapshot = { beliefs: Beliefs; stage: number; asked: string[]; current: Pair | null };
+/** Hard stop. Past this the marginal swipe is not worth the attention. */
+const MAX_SWIPES = 26;
+
+type Snapshot = { beliefs: Beliefs; asked: string[]; current: Pair | null };
 
 type SessionState = {
   seed: number;
   beliefs: Beliefs;
-  stage: number;
   /** Sets do not survive JSON persistence, so this is an array. */
   asked: string[];
   swipes: number;
@@ -28,6 +33,7 @@ type SessionState = {
   clearOverrides: () => void;
   params: () => DesignParams;
   progress: () => number;
+  phase: () => 'preset' | 'facet' | 'axis';
 };
 
 /**
@@ -53,14 +59,20 @@ function rngFor(seed: number, swipes: number) {
   return mulberry32(seed * 7919 + swipes);
 }
 
-/** Walk forward through stages until a pair appears or the session is done. */
-function advance(beliefs: Beliefs, stage: number, seed: number, swipes: number, asked: string[]) {
-  const set = new Set(asked);
-  for (let s = stage; s < STAGE_COUNT; s++) {
-    const pair = nextPair(beliefs, s, rngFor(seed, swipes), set);
-    if (pair) return { stage: s, current: pair, done: false };
+/**
+ * Produce the next comparison, or end the session.
+ *
+ * The vibe and facet phases always run to completion — they are the interesting
+ * part, and cutting them short to save swipes trades the whole experience for a
+ * marginal gain in precision. Only the detail phase stops early.
+ */
+function advance(beliefs: Beliefs, seed: number, swipes: number, asked: string[]) {
+  const minimum = VIBE_SWIPES + FACET_SWIPES;
+  if (swipes >= MAX_SWIPES || (swipes >= minimum && allSettled(beliefs))) {
+    return { current: null, done: true };
   }
-  return { stage: STAGE_COUNT, current: null, done: true };
+  const pair = nextPair(beliefs, swipes, rngFor(seed, swipes), new Set(asked));
+  return pair ? { current: pair, done: false } : { current: null, done: true };
 }
 
 export const useSession = create<SessionState>()(
@@ -68,7 +80,6 @@ export const useSession = create<SessionState>()(
     (set, get) => ({
       seed: 1,
       beliefs: initBeliefs(),
-      stage: 0,
       asked: [],
       swipes: 0,
       current: null,
@@ -78,20 +89,21 @@ export const useSession = create<SessionState>()(
 
       start: (seed = Math.floor(Math.random() * 1e9)) => {
         const beliefs = initBeliefs();
-        const next = advance(beliefs, 0, seed, 0, []);
+        const next = advance(beliefs, seed, 0, []);
         set({ seed, beliefs, asked: [], swipes: 0, overrides: {}, history: [], ...next });
       },
 
       choose: (side) => {
-        const { current, beliefs, asked, seed, swipes, stage, history } = get();
+        const { current, beliefs, asked, seed, swipes, history } = get();
         if (!current) return;
 
-        const [winner, loser] =
-          side === 'a' ? [current.aIndex, current.bIndex] : [current.bIndex, current.aIndex];
-
-        const snapshot: Snapshot = { beliefs, stage, asked, current };
-        const nextBeliefs = recordChoice(beliefs, current.axis, winner, loser);
-        const nextAsked = [...asked, pairKey(current.axis, current.aIndex, current.bIndex)];
+        const snapshot: Snapshot = { beliefs, asked, current };
+        const nextBeliefs = recordComparison(
+          beliefs,
+          diffsForWinner(current, side),
+          PHASE_WEIGHT[current.kind],
+        );
+        const nextAsked = [...asked, current.id];
         const nextSwipes = swipes + 1;
 
         set({
@@ -99,7 +111,7 @@ export const useSession = create<SessionState>()(
           asked: nextAsked,
           swipes: nextSwipes,
           history: [...history, snapshot],
-          ...advance(nextBeliefs, stage, seed, nextSwipes, nextAsked),
+          ...advance(nextBeliefs, seed, nextSwipes, nextAsked),
         });
       },
 
@@ -109,7 +121,6 @@ export const useSession = create<SessionState>()(
         if (!previous) return;
         set({
           beliefs: previous.beliefs,
-          stage: previous.stage,
           asked: previous.asked,
           current: previous.current,
           swipes: Math.max(0, swipes - 1),
@@ -125,19 +136,27 @@ export const useSession = create<SessionState>()(
 
       params: () => resolveParams(get().beliefs, get().overrides),
 
-      progress: () => confidence(get().beliefs),
+      progress: () => {
+        const { beliefs, swipes } = get();
+        // Blend belief confidence with raw progress through the scripted
+        // phases, or the bar sits near zero through the whole vibe round.
+        const scripted = Math.min(1, swipes / (VIBE_SWIPES + FACET_SWIPES));
+        return Math.max(confidence(beliefs), scripted * 0.6);
+      },
+
+      phase: () => phaseFor(get().swipes),
     }),
     {
       name: 'nts-session',
       // `current` is derived; recompute it on rehydrate rather than trusting
       // a stored pair that may predate an engine change.
       partialize: (s) => ({
-        seed: s.seed, beliefs: s.beliefs, stage: s.stage, asked: s.asked,
+        seed: s.seed, beliefs: s.beliefs, asked: s.asked,
         swipes: s.swipes, overrides: s.overrides, done: s.done,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        const next = advance(state.beliefs, state.stage, state.seed, state.swipes, state.asked);
+        const next = advance(state.beliefs, state.seed, state.swipes, state.asked);
         Object.assign(state, next, { history: [] });
       },
     },

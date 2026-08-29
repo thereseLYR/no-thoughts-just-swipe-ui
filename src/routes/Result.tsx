@@ -29,7 +29,10 @@ export function ResultView({
   params: DesignParams;
   onOverride?: <K extends AxisKey>(key: K, value: DesignParams[K]) => void;
 }) {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  // The system's own mode is the default; this only records a manual override,
+  // so switching Base in fine-tune still flips the preview.
+  const [themeOverride, setThemeOverride] = useState<'light' | 'dark' | null>(null);
+  const theme = themeOverride ?? params.mode;
   const [active, setActive] = useState(0);
   const [copied, setCopied] = useState(false);
 
@@ -54,14 +57,14 @@ export function ResultView({
           <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-4 py-2">
             <span className="text-xs text-zinc-400">Preview</span>
             <button
-              onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+              onClick={() => setThemeOverride(theme === 'light' ? 'dark' : 'light')}
               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
             >
               {theme === 'light' ? <Moon size={13} /> : <Sun size={13} />}
               {theme === 'light' ? 'Dark' : 'Light'}
             </button>
           </div>
-          <ScaledPreview params={params} theme={theme} compact={false} ratio={16 / 10} />
+          <ScaledPreview params={params} theme={theme} focus="full" compact={false} ratio={16 / 10} />
         </div>
 
         <div>

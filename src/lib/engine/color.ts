@@ -19,9 +19,12 @@ export type Ramp = Record<RampStop, string>;
 const LIGHTNESS = [0.97, 0.94, 0.89, 0.82, 0.74, 0.66, 0.58, 0.5, 0.42, 0.34, 0.26];
 
 const PEAK_CHROMA: Record<ChromaLevel, number> = {
-  muted: 0.06,
-  balanced: 0.13,
-  vivid: 0.2,
+  muted: 0.05,
+  balanced: 0.12,
+  vivid: 0.19,
+  // Past sRGB for most hues, so gamut mapping does real work here. The point is
+  // to sit at the very edge of what the display can show.
+  neon: 0.32,
 };
 
 /** Neutral hue per temperature. Pure greys carry no chroma at all. */

@@ -8,10 +8,13 @@ test('swiping produces an exportable design system', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Start swiping' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Which do you prefer?' })).toBeVisible();
+  // The opening round compares whole aesthetics, not single axes.
+  await expect(
+    page.getByRole('heading', { name: 'Which world do you want to live in?' }),
+  ).toBeVisible();
 
   // Alternate so no single axis value wins by default.
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 40; i++) {
     if (page.url().endsWith('/result')) break;
     await page.keyboard.press(i % 3 === 0 ? 'ArrowRight' : 'ArrowLeft');
   }
@@ -26,6 +29,27 @@ test('swiping produces an exportable design system', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Download \.zip/ })).toBeEnabled();
 });
 
+test('later rounds show only what changed, expandable to the full page', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start swiping' }).click();
+
+  // The vibe round is a full page already — nothing to expand into.
+  await expect(page.getByRole('button', { name: /Show full page/ })).toHaveCount(0);
+
+  // Swipe out of the vibe round.
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft');
+
+  const expand = page.getByRole('button', { name: /Show full page/ });
+  await expect(expand).toBeVisible();
+
+  await expand.click();
+  await expect(page.getByRole('button', { name: /Just the difference/ })).toBeVisible();
+
+  // Keyboard shortcut toggles it back.
+  await page.keyboard.press('f');
+  await expect(page.getByRole('button', { name: /Show full page/ })).toBeVisible();
+});
+
 test('undo steps a swipe back', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Start swiping' }).click();
@@ -34,13 +58,14 @@ test('undo steps a swipe back', async ({ page }) => {
   await page.keyboard.press('ArrowLeft');
   await expect(page.getByText(/2 swipes/)).toBeVisible();
 
+
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(page.getByText(/1 swipes/)).toBeVisible();
 });
 
 test('a share link renders without a local session', async ({ page }) => {
-  // hue=violet, vivid, cool greys, grotesk, pill radius, hard shadow.
-  await page.goto('/s/WzEsOSwyLDAsMSwzLDEsNCwyLDMsMV0');
+  // The cyberpunk preset: dark, neon magenta, terminal type, uppercase, glow.
+  await page.goto('/s/WzIsMSwxMSwzLDAsMSwyLDQsNSwyLDEsMSwwLDEsMF0');
   await expect(page.getByRole('heading', { name: 'Shared design system' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Remix this/ })).toBeVisible();
 });
@@ -48,4 +73,11 @@ test('a share link renders without a local session', async ({ page }) => {
 test('a malformed share link fails gracefully', async ({ page }) => {
   await page.goto('/s/total-nonsense');
   await expect(page.getByRole('heading', { name: "Can't open that link" })).toBeVisible();
+});
+
+test('a v1 link is rejected rather than silently misread', async ({ page }) => {
+  // Same encoding, previous engine version — the param space has since changed.
+  await page.goto('/s/WzEsOSwyLDAsMSwzLDEsNCwyLDMsMV0');
+  await expect(page.getByRole('heading', { name: "Can't open that link" })).toBeVisible();
+  await expect(page.getByText(/engine v1/)).toBeVisible();
 });

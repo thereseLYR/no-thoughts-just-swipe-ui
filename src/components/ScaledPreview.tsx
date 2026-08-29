@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Preview } from './Preview';
+import { FocusView, type Focus } from './FocusView';
 import type { DesignParams } from '@/lib/engine/params';
 
 const DESIGN_WIDTH = 720;
@@ -14,12 +14,16 @@ const DESIGN_WIDTH = 720;
  */
 export function ScaledPreview({
   params,
-  theme = 'light',
+  // Undefined, not 'light': the token set decides its own default mode, and a
+  // dark-first system must preview dark unless something explicitly overrides.
+  theme,
+  focus = 'full',
   compact = true,
   ratio = 4 / 3,
 }: {
   params: DesignParams;
   theme?: 'light' | 'dark';
+  focus?: Focus;
   compact?: boolean;
   ratio?: number;
 }) {
@@ -47,7 +51,7 @@ export function ScaledPreview({
           transformOrigin: 'top left',
         }}
       >
-        <Preview params={params} theme={theme} compact={compact} />
+        <FocusView params={params} theme={theme} focus={focus} compact={compact} />
       </div>
     </div>
   );
